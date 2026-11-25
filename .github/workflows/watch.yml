@@ -1,0 +1,58 @@
+name: Surveiller les notes ARP
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # toutes les 5 minutes (GitHub peut avoir quelques minutes de retard)
+  workflow_dispatch: {}      # bouton "Run workflow" pour tester a la main
+
+concurrency:
+  group: arp-watch
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: write   # pour supprimer les vieux caches d'etat
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install --quiet cryptography==43.0.3
+
+      - name: Recuperer l'etat precedent (chiffre)
+        uses: actions/cache/restore@v4
+        with:
+          path: state.bin
+          key: arp-state-${{ github.run_id }}
+          restore-keys: arp-state-
+
+      - name: Verifier les notes
+        env:
+          ETUDIANT_ID: ${{ secrets.ETUDIANT_ID }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          STATE_KEY: ${{ secrets.STATE_KEY }}
+          ARP_REFRESH_TOKEN: ${{ secrets.ARP_REFRESH_TOKEN }}
+        run: python watcher.py
+
+      - name: Sauvegarder l'etat (chiffre)
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: state.bin
+          key: arp-state-${{ github.run_id }}
+
+      - name: Nettoyer les anciens etats
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        continue-on-error: true
+        run: |
+          gh cache list --repo "$GITHUB_REPOSITORY" --key arp-state- --sort created_at --order desc --limit 100 --json id -q '.[3:][].id' |
+            xargs -r -n1 gh cache delete --repo "$GITHUB_REPOSITORY"
