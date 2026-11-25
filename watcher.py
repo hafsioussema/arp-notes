@@ -21,6 +21,11 @@ import urllib.request
 
 from cryptography.fernet import Fernet, InvalidToken
 
+_missing = [k for k in ("ETUDIANT_ID", "NTFY_TOPIC", "STATE_KEY") if not os.environ.get(k, "").strip()]
+if _missing:
+    print("Secrets manquants : " + ", ".join(_missing) + " -> rien a faire pour l'instant (voir README).")
+    sys.exit(0)
+
 API = os.environ.get("ARP_API", "https://arp.esprit.tn/gw/api")
 ETUDIANT_ID = os.environ["ETUDIANT_ID"].strip()
 NTFY_TOPIC = os.environ["NTFY_TOPIC"].strip()
